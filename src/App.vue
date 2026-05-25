@@ -9,17 +9,7 @@
               <span class="logo-icon">💬</span>
               <span class="logo-text">WhatsApp Promo Tool</span>
             </div>
-            <nav class="nav-links">
-              <router-link to="/contacts" class="nav-item" active-class="active">
-                Upload Contacts
-              </router-link>
-              <router-link to="/templates" class="nav-item" active-class="active">
-                Template Builder
-              </router-link>
-              <router-link to="/chat" class="nav-item" active-class="active">
-                AI Chat Agent
-              </router-link>
-            </nav>
+            <!-- Minimal header without navigation links -->
           </header>
           
           <!-- Main Content Area -->

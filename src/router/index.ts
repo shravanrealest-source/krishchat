@@ -7,7 +7,7 @@ import ChatView from '../views/chat/index.vue';
 const routes: Array<RouteRecordRaw> = [
   {
     path: '/',
-    redirect: '/contacts'
+    redirect: '/chat'
   },
   {
     path: '/contacts',

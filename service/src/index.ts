@@ -3,7 +3,7 @@ dotenv.config();
 
 import express, { Request, Response } from 'express';
 import cors from 'cors';
-import { extractPhoneNumbers, saveContacts } from './utils/contactHelper';
+import { extractPhoneNumbers, saveContacts, processAndSaveContacts } from './utils/contactHelper';
 import { getTemplates, saveTemplate } from './utils/templateHelper';
 import { refineTemplate, extractSmartNumbers, handleChatInteraction } from './utils/geminiHelper';
 
@@ -32,17 +32,16 @@ app.post('/api/contacts/upload', (req: Request, res: Response) => {
   }
 
   try {
-    // 1. Extract phone numbers from rawText
-    const extractedNumbers = extractPhoneNumbers(rawText);
+    // Process and save contacts with detailed breakdown
+    const result = processAndSaveContacts(rawText);
 
-    // 2. Save extracted numbers to local storage
-    const { addedCount, totalCount } = saveContacts(extractedNumbers);
-
-    // 3. Return success response
+    // Return success response with detailed statistics
     res.json({
       success: true,
-      added: addedCount,
-      total: totalCount
+      added: result.added,
+      duplicates: result.duplicates,
+      invalids: result.invalids,
+      total: result.total
     });
   } catch (error: any) {
     res.status(500).json({

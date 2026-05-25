@@ -1,5 +1,5 @@
 import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai';
-import { normalizeAndExtractNumbers, saveContacts } from './contactHelper';
+import { normalizeAndExtractNumbers, saveContacts, processAndSaveContacts } from './contactHelper';
 import { saveTemplate } from './templateHelper';
 
 // Initialize client
@@ -114,10 +114,15 @@ export async function handleChatInteraction(messages: any[]): Promise<string> {
   }
 
   // Extract previous history (all except the last user message)
-  const history = messages.slice(0, -1).map(msg => ({
+  let history = messages.slice(0, -1).map(msg => ({
     role: msg.role === 'user' ? 'user' : 'model',
     parts: msg.parts.map((p: any) => ({ text: p.text }))
   }));
+
+  // Gemini API startChat history MUST start with 'user' role
+  while (history.length > 0 && history[0].role === 'model') {
+    history.shift();
+  }
 
   // Get the last message containing the user prompt
   const lastMessage = messages[messages.length - 1];
@@ -155,11 +160,10 @@ export async function handleChatInteraction(messages: any[]): Promise<string> {
       if (call.name === 'saveContactsTool') {
         const args = call.args as { rawText: string };
         try {
-          const extractedNumbers = normalizeAndExtractNumbers(args.rawText);
-          const saveResult = saveContacts(extractedNumbers);
+          const saveResult = processAndSaveContacts(args.rawText);
           toolResult = {
             success: true,
-            message: 'Successfully processed and saved contacts.',
+            message: `Processed contacts successfully. Stored ${saveResult.added.length} new numbers, found ${saveResult.duplicates.length} duplicates and ${saveResult.invalids.length} invalid items.`,
             ...saveResult
           };
         } catch (err: any) {

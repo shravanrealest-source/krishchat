@@ -91,4 +91,89 @@ export function saveContacts(newNumbers: string[]): { addedCount: number; totalC
   return { addedCount, totalCount };
 }
 
+/**
+ * Parses raw text, extracts valid numbers, filters out duplicates (against both the input and existing DB),
+ * collects invalid number sequences, saves the new valid numbers, and returns detailed stats.
+ */
+export function processAndSaveContacts(rawText: string): {
+  added: string[];
+  duplicates: string[];
+  invalids: string[];
+  total: number;
+} {
+  // Ensure the directory exists
+  if (!fs.existsSync(CONTACTS_DIR)) {
+    fs.mkdirSync(CONTACTS_DIR, { recursive: true });
+  }
+
+  let existingNumbers: string[] = [];
+
+  // Check if file exists, read and parse it, or initialize it
+  if (fs.existsSync(CONTACTS_FILE)) {
+    try {
+      const fileData = fs.readFileSync(CONTACTS_FILE, 'utf8').trim();
+      if (fileData) {
+        existingNumbers = JSON.parse(fileData);
+        if (!Array.isArray(existingNumbers)) {
+          existingNumbers = [];
+        }
+      }
+    } catch {
+      existingNumbers = [];
+    }
+  }
+
+  const existingSet = new Set(existingNumbers);
+
+  // Find all sequences containing digits and phone chars
+  // Match any sequence of digits, plus, minus, parens, spaces of length >= 3
+  const regex = /[+\d\-\(\)\s]{3,}/g;
+  let match;
+
+  const validSet = new Set<string>();
+  const duplicatesSet = new Set<string>();
+  const invalidsSet = new Set<string>();
+
+  // Use a regex match loop to scan the entire input
+  while ((match = regex.exec(rawText)) !== null) {
+    const rawMatch = match[0].trim();
+    if (!rawMatch) continue;
+
+    // Clean all non-digits
+    const cleaned = rawMatch.replace(/[^\d]/g, '');
+    if (!cleaned) continue;
+
+    if (cleaned.length >= 10 && cleaned.length <= 15) {
+      let normalized = cleaned;
+      if (cleaned.length === 10) {
+        normalized = '91' + cleaned;
+      }
+
+      if (existingSet.has(normalized) || validSet.has(normalized)) {
+        duplicatesSet.add(normalized);
+      } else {
+        validSet.add(normalized);
+      }
+    } else if (cleaned.length >= 5 && cleaned.length < 10) {
+      invalidsSet.add(cleaned);
+    } else if (cleaned.length > 15) {
+      invalidsSet.add(cleaned);
+    }
+  }
+
+  const added = Array.from(validSet);
+  const updatedList = [...existingNumbers, ...added];
+
+  // Save the updated contacts list
+  fs.writeFileSync(CONTACTS_FILE, JSON.stringify(updatedList, null, 2), 'utf8');
+
+  return {
+    added,
+    duplicates: Array.from(duplicatesSet),
+    invalids: Array.from(invalidsSet),
+    total: updatedList.length
+  };
+}
+
 export const normalizeAndExtractNumbers = extractPhoneNumbers;
+

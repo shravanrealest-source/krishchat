@@ -3,7 +3,7 @@
     "name": "Welcome Text",
     "type": "text",
     "content": "Welcome to our service!",
-    "id": "6bb6cf51-dc26-4764-9876-863110021d5c"
+    "id": "dd267935-e95a-4445-90bc-782475a5f465"
   },
   {
     "name": "Discount Offer",
@@ -13,7 +13,7 @@
       "Claim",
       "Decline"
     ],
-    "id": "feb3810d-56bb-419b-b88b-9677f8428007"
+    "id": "94dd6eee-0604-487d-8b2f-b56541e06db0"
   },
   {
     "name": "Product Catalog",
@@ -23,6 +23,16 @@
     "buttons": [
       "Shop Now"
     ],
-    "id": "597d664e-1cf0-40fc-ac26-617bcaed507b"
+    "id": "82f89d62-e6d2-4b7b-8987-1e2caa0a54ae"
+  },
+  {
+    "name": "welcome",
+    "type": "text_button",
+    "content": "Hello Get 20% off on flats booking ",
+    "buttons": [
+      "Intrested ",
+      "Yes "
+    ],
+    "id": "671a545f-ce33-47c0-96fe-1d889ebfb503"
   }
 ]

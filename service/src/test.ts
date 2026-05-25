@@ -3,7 +3,7 @@ dotenv.config();
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { extractPhoneNumbers, saveContacts } from './utils/contactHelper';
+import { extractPhoneNumbers, saveContacts, processAndSaveContacts } from './utils/contactHelper';
 import { getTemplates, saveTemplate, TextButtonTemplate } from './utils/templateHelper';
 import { refineTemplate, extractSmartNumbers, handleChatInteraction } from './utils/geminiHelper';
 
@@ -197,6 +197,19 @@ async function runTests() {
     const discountTemplate = templatesData.find((t: any) => t.name.toLowerCase().includes('discount') || t.content.toLowerCase().includes('10%'));
     console.log('  Discount template found in database:', discountTemplate);
     console.assert(discountTemplate !== undefined, 'Should have created a discount template');
+
+    console.log('\n[Test 6] Testing processAndSaveContacts...');
+    const testRawInput = `
+      John Doe: +91 9908080857
+      Jane Smith: 987654 (invalid)
+      Alice: 9908080857 (duplicate)
+      Bob: 919876543210 (valid)
+    `;
+    const processResult = processAndSaveContacts(testRawInput);
+    console.log('  processAndSaveContacts result:', processResult);
+    console.assert(processResult.duplicates.includes('919876543210'), 'Should have identified Bob as duplicate (already in DB)');
+    console.assert(processResult.duplicates.includes('919908080857'), 'Should have identified John/Alice as duplicate');
+    console.assert(processResult.invalids.includes('987654'), 'Should have identified Jane as invalid');
 
     console.log('\n--- All Tests (including Gemini AI) Completed Successfully ---');
   } catch (err: any) {
