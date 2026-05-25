@@ -1,0 +1,28 @@
+[
+  {
+    "name": "Welcome Text",
+    "type": "text",
+    "content": "Welcome to our service!",
+    "id": "6bb6cf51-dc26-4764-9876-863110021d5c"
+  },
+  {
+    "name": "Discount Offer",
+    "type": "text_button",
+    "content": "Get 20% off now!",
+    "buttons": [
+      "Claim",
+      "Decline"
+    ],
+    "id": "feb3810d-56bb-419b-b88b-9677f8428007"
+  },
+  {
+    "name": "Product Catalog",
+    "type": "image_text_button",
+    "imageUrl": "https://example.com/catalog.jpg",
+    "content": "Check out our new catalog.",
+    "buttons": [
+      "Shop Now"
+    ],
+    "id": "597d664e-1cf0-40fc-ac26-617bcaed507b"
+  }
+]
