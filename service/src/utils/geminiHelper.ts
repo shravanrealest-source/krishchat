@@ -1,166 +1,198 @@
-import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai';
-import { normalizeAndExtractNumbers, saveContacts, processAndSaveContacts } from './contactHelper';
+import { processAndSaveContacts } from './contactHelper';
 import { saveTemplate } from './templateHelper';
 
-// Initialize client
-const apiKey = process.env.GEMINI_API_KEY || '';
-const genAI = new GoogleGenerativeAI(apiKey);
+const OLLAMA_API_URL = 'http://localhost:11434/v1/chat/completions';
+const OLLAMA_MODEL = 'qwen2.5:3b';
 
 /**
- * Uses Gemini to refine a WhatsApp template text to make it more engaging and concise.
+ * Sends a chat completion request to local Ollama server.
  */
-export async function refineTemplate(content: string): Promise<string> {
-  if (!content) return '';
-  
-  if (!apiKey) {
-    throw new Error('GEMINI_API_KEY is not defined in the environment.');
+async function callOllama(payload: any): Promise<any> {
+  try {
+    const response = await fetch(OLLAMA_API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload)
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Ollama API error (${response.status}): ${errorText}`);
+    }
+
+    return await response.json();
+  } catch (error: any) {
+    throw new Error(`Failed to connect to local Ollama server. Ensure Ollama is running and has model '${OLLAMA_MODEL}' loaded. Details: ${error.message}`);
   }
-
-  const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
-  
-  const prompt = `System: You are an expert WhatsApp copywriter. Refine the following message to make it more engaging, concise, and conversion-focused. Keep it under 500 characters. CRITICAL INSTRUCTION: You must return ONLY the final refined message text. Do not include any conversational filler, introductory text, markdown formatting, or multiple options. Just the exact text the user should send.
-  
-Message to refine: "${content}"`;
-
-  const result = await model.generateContent(prompt);
-  const response = await result.response;
-  return response.text().trim();
 }
 
 /**
- * Uses Gemini to extract any hidden phone numbers from a raw block of text (even if spelled out).
+ * Uses Ollama to refine a WhatsApp template text to make it more engaging and concise.
+ */
+export async function refineTemplate(content: string): Promise<string> {
+  if (!content) return '';
+
+  const systemPrompt = `You are an expert WhatsApp copywriter. Refine the user's message to make it more engaging, concise, and conversion-focused. Keep it under 500 characters. CRITICAL INSTRUCTION: You must return ONLY the final refined message text. Do not include any conversational filler, introductory text, markdown formatting, or multiple options. Just the exact text.`;
+
+  const payload = {
+    model: OLLAMA_MODEL,
+    messages: [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: content }
+    ]
+  };
+
+  const data = await callOllama(payload);
+  return data.choices?.[0]?.message?.content?.trim() || '';
+}
+
+/**
+ * Uses Ollama to extract any hidden phone numbers from a raw block of text (even if spelled out).
  */
 export async function extractSmartNumbers(rawText: string): Promise<string> {
   if (!rawText) return '';
 
-  if (!apiKey) {
-    throw new Error('GEMINI_API_KEY is not defined in the environment.');
-  }
+  const systemPrompt = `Find and extract any hidden phone numbers from the text, even if spelled out in words. CRITICAL INSTRUCTION: Return the phone numbers as a single comma-separated string of digits (e.g., '9876543210,1234567890'). Do not include any conversational text.`;
 
-  const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+  const payload = {
+    model: OLLAMA_MODEL,
+    temperature: 0.1,
+    messages: [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: rawText }
+    ]
+  };
 
-  const prompt = `System: Find and extract any hidden phone numbers from this text, even if spelled out in words. CRITICAL INSTRUCTION: Return the phone number as a single, contiguous string of digits (e.g., '9876543210'). If there are multiple phone numbers, separate each full number with a comma (e.g., '9876543210,1234567890'). Do not separate individual digits with commas. Do not include any conversational text.
-  
-Text to analyze: "${rawText}"`;
-
-  const result = await model.generateContent(prompt);
-  const response = await result.response;
-  return response.text().trim();
+  const data = await callOllama(payload);
+  return data.choices?.[0]?.message?.content?.trim() || '';
 }
 
-// --- Gemini Tool Definitions (Function Calling) ---
+// --- OpenAI-compatible Tool Definitions ---
 
 const saveContactsTool = {
-  name: 'saveContactsTool',
-  description: 'Use this to save phone numbers when a user asks to add or save contacts.',
-  parameters: {
-    type: SchemaType.OBJECT,
-    properties: {
-      rawText: {
-        type: SchemaType.STRING,
-        description: 'The raw text containing one or more phone numbers to extract and save.'
-      }
-    },
-    required: ['rawText']
+  type: 'function' as const,
+  function: {
+    name: 'saveContactsTool',
+    description: 'Use this to save phone numbers when a user asks to add or save contacts.',
+    parameters: {
+      type: 'object',
+      properties: {
+        rawText: {
+          type: 'string',
+          description: 'The raw text containing one or more phone numbers to extract and save.'
+        }
+      },
+      required: ['rawText']
+    }
   }
 };
 
 const saveTemplateTool = {
-  name: 'saveTemplateTool',
-  description: 'Use this to create and save a new WhatsApp template when a user asks for promotional copy.',
-  parameters: {
-    type: SchemaType.OBJECT,
-    properties: {
-      name: {
-        type: SchemaType.STRING,
-        description: 'The name of the template.'
-      },
-      type: {
-        type: SchemaType.STRING,
-        enum: ['text', 'text_button', 'image_text_button'],
-        description: 'The type of the template: text, text_button, or image_text_button.'
-      },
-      content: {
-        type: SchemaType.STRING,
-        description: 'The main message content of the template.'
-      },
-      buttons: {
-        type: SchemaType.ARRAY,
-        items: {
-          type: SchemaType.STRING
+  type: 'function' as const,
+  function: {
+    name: 'saveTemplateTool',
+    description: 'Use this to create and save a new WhatsApp template when a user asks for promotional copy.',
+    parameters: {
+      type: 'object',
+      properties: {
+        name: {
+          type: 'string',
+          description: 'The name of the template.'
         },
-        description: 'An array of up to 3 button labels (required for text_button and image_text_button type).'
+        type: {
+          type: 'string',
+          enum: ['text', 'text_button', 'image_text_button'],
+          description: 'The type of the template: text, text_button, or image_text_button.'
+        },
+        content: {
+          type: 'string',
+          description: 'The main message content of the template.'
+        },
+        buttons: {
+          type: 'array',
+          items: {
+            type: 'string'
+          },
+          description: 'An array of up to 3 button labels (required for text_button and image_text_button type).'
+        },
+        imageUrl: {
+          type: 'string',
+          description: 'The URL of the image (required for image_text_button type).'
+        }
       },
-      imageUrl: {
-        type: SchemaType.STRING,
-        description: 'The URL of the image (required for image_text_button type).'
-      }
-    },
-    required: ['name', 'type', 'content']
+      required: ['name', 'type', 'content']
+    }
   }
 };
 
-const tools: any = [{
-  functionDeclarations: [saveContactsTool, saveTemplateTool]
-}];
+const tools = [saveContactsTool, saveTemplateTool];
 
 /**
  * Handles a multi-turn chat interaction with the user.
- * Supports tool calling (function calling) for saving contacts and creating templates.
+ * Supports OpenAI-style tool calling (function calling) for saving contacts and templates.
  */
 export async function handleChatInteraction(messages: any[]): Promise<string> {
   if (!messages || messages.length === 0) {
     throw new Error('Messages array cannot be empty.');
   }
 
-  // Extract previous history (all except the last user message)
-  let history = messages.slice(0, -1).map(msg => ({
-    role: msg.role === 'user' ? 'user' : 'model',
-    parts: msg.parts.map((p: any) => ({ text: p.text }))
+  // 1. Establish the system prompt
+  const systemPrompt = `You are an expert WhatsApp promotion assistant. You can help users save contact numbers and create message templates. You have access to local tools (saveContactsTool and saveTemplateTool) to automate these tasks. When users request contact storage or template creation, call the appropriate tool.`;
+
+  // 2. Map frontend history to OpenAI format
+  const mappedMessages = messages.map(msg => ({
+    role: msg.role === 'model' ? 'assistant' : msg.role,
+    content: msg.parts?.[0]?.text || msg.text || ''
   }));
 
-  // Gemini API startChat history MUST start with 'user' role
-  while (history.length > 0 && history[0].role === 'model') {
-    history.shift();
+  // Clean up any leading assistant messages (if any)
+  while (mappedMessages.length > 0 && mappedMessages[0].role === 'assistant') {
+    mappedMessages.shift();
   }
 
-  // Get the last message containing the user prompt
-  const lastMessage = messages[messages.length - 1];
-  if (lastMessage.role !== 'user') {
-    throw new Error('The last message in history must be from the user.');
+  const history = [
+    { role: 'system', content: systemPrompt },
+    ...mappedMessages
+  ];
+
+  // 3. Make initial request to Ollama with tools
+  const payload = {
+    model: OLLAMA_MODEL,
+    messages: history,
+    tools: tools
+  };
+
+  const responseData = await callOllama(payload);
+  const responseMessage = responseData.choices?.[0]?.message;
+
+  if (!responseMessage) {
+    throw new Error('Invalid response received from local Ollama.');
   }
 
-  const userPrompt = lastMessage.parts?.[0]?.text;
-  if (!userPrompt) {
-    throw new Error('The user prompt text is required.');
-  }
+  // 4. Handle tool calls if returned
+  if (responseMessage.tool_calls && responseMessage.tool_calls.length > 0) {
+    // Add the assistant's decision to call tools into the history
+    history.push(responseMessage);
 
-  // Initialize model with tools configuration
-  const model = genAI.getGenerativeModel({
-    model: 'gemini-2.5-flash',
-    tools
-  });
+    for (const toolCall of responseMessage.tool_calls) {
+      const functionName = toolCall.function.name;
+      let args: any = {};
+      try {
+        args = typeof toolCall.function.arguments === 'string'
+          ? JSON.parse(toolCall.function.arguments)
+          : toolCall.function.arguments;
+      } catch (e) {
+        // Fallback in case of parsing errors
+        args = {};
+      }
 
-  // Start chat session with history
-  const chat = model.startChat({ history });
-
-  // Send the user prompt
-  const result = await chat.sendMessage(userPrompt);
-  const response = await result.response;
-
-  // Retrieve function calls recommended by Gemini
-  const functionCalls = response.functionCalls();
-
-  if (functionCalls && functionCalls.length > 0) {
-    const functionResponses = [];
-
-    for (const call of functionCalls) {
       let toolResult: any;
 
-      if (call.name === 'saveContactsTool') {
-        const args = call.args as { rawText: string };
+      if (functionName === 'saveContactsTool') {
         try {
-          const saveResult = processAndSaveContacts(args.rawText);
+          const saveResult = processAndSaveContacts(args.rawText || '');
           toolResult = {
             success: true,
             message: `Processed contacts successfully. Stored ${saveResult.added.length} new numbers, found ${saveResult.duplicates.length} duplicates and ${saveResult.invalids.length} invalid items.`,
@@ -169,8 +201,7 @@ export async function handleChatInteraction(messages: any[]): Promise<string> {
         } catch (err: any) {
           toolResult = { success: false, error: err.message };
         }
-      } else if (call.name === 'saveTemplateTool') {
-        const args = call.args as any;
+      } else if (functionName === 'saveTemplateTool') {
         try {
           const saveResult = saveTemplate(args);
           toolResult = {
@@ -182,22 +213,27 @@ export async function handleChatInteraction(messages: any[]): Promise<string> {
           toolResult = { success: false, error: err.message };
         }
       } else {
-        toolResult = { success: false, error: `Unknown tool: ${call.name}` };
+        toolResult = { success: false, error: `Unknown tool: ${functionName}` };
       }
 
-      functionResponses.push({
-        functionResponse: {
-          name: call.name,
-          response: toolResult
-        }
-      });
+      // Append the tool execution result to the history
+      history.push({
+        role: 'tool',
+        tool_call_id: toolCall.id,
+        name: functionName,
+        content: JSON.stringify(toolResult)
+      } as any);
     }
 
-    // Send the execution results back to the model
-    const finalResult = await chat.sendMessage(functionResponses);
-    const finalResponse = await finalResult.response;
-    return finalResponse.text();
+    // Send second request to Ollama to summarize and conclude the response
+    const secondPayload = {
+      model: OLLAMA_MODEL,
+      messages: history
+    };
+
+    const secondData = await callOllama(secondPayload);
+    return secondData.choices?.[0]?.message?.content || '';
   }
 
-  return response.text();
+  return responseMessage.content || '';
 }
